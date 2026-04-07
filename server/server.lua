@@ -82,7 +82,7 @@ CreateCallback('race:create', function(source, cb, raceData)
         return
     end
 
-    for _, race in ipairs(cacheData) do
+    for _, race in ipairs(cacheData.tracks or {}) do
         if race.id == raceId then
             if type(race.races) == "string" then
                 race.races = json.decode(race.races)
@@ -140,7 +140,7 @@ CreateCallback('race:create', function(source, cb, raceData)
         }
     }
 
-    table.insert(cacheData, newRaceEntry)
+    table.insert(cacheData.tracks, newRaceEntry)
 
     TriggerClientEvent('race:update', -1, cacheData)
     Wait(1000)
@@ -154,7 +154,7 @@ CreateCallback('race:create', function(source, cb, raceData)
 end)
 
 CreateCallback('race:join', function(source, cb, raceId, password, carType)
-    for _, race in ipairs(cacheData) do
+    for _, race in ipairs(cacheData.tracks or {}) do
         if race.id == raceId then
             if type(race.races) == "string" then
                 race.races = json.decode(race.races)
@@ -194,9 +194,9 @@ CreateCallback('race:join', function(source, cb, raceId, password, carType)
 end)
 
 CreateCallback('race:endrace', function(source, cb, raceId)
-    for i, race in ipairs(cacheData) do
+    for i, race in ipairs(cacheData.tracks or {}) do
         if race.id == raceId then
-            table.remove(cacheData, i)
+            table.remove(cacheData.tracks, i)
 
             MySQL.Sync.execute("DELETE FROM exter_racing WHERE id = @id", {
                 ['@id'] = race.id
@@ -242,7 +242,7 @@ end)
 CreateCallback('race:start', function(source, cb, raceId)
     local playerCid = GetPlayerCid(source)
     local raceToStart = nil
-    for _, race in ipairs(cacheData) do
+    for _, race in ipairs(cacheData.tracks or {}) do
         if race.id == raceId then
             if type(race.races) == "string" then
                 race.races = json.decode(race.races)
@@ -303,8 +303,6 @@ CreateCallback('race:start', function(source, cb, raceId)
     })
 end)
 
-totalCheckpoints = 0
-
 RegisterNetEvent('race:updatePlayerPosition')
 AddEventHandler('race:updatePlayerPosition', function(raceId, lap, checkpoint,checkpointTime,totalCheckpoints,bestLapTime,carName,carTransmission,carTurbo,carType)
     local source = source
@@ -320,8 +318,6 @@ AddEventHandler('race:updatePlayerPosition', function(raceId, lap, checkpoint,ch
     playerPositions[source].carTransmission = carTransmission
     playerPositions[source].carTurbo = carTurbo
     playerPositions[source].carType = carType
-    totalCheckpoints  = totalCheckpoints
-
     if bestLapTime then
         playerPositions[source].bestLapTime = bestLapTime
     else
@@ -340,11 +336,16 @@ end)
 RegisterNetEvent('race:disqualify')
 AddEventHandler('race:disqualify', function(raceId)
     local source = source
-    for _, race in ipairs(cacheData) do
+    for _, race in ipairs(cacheData.tracks or {}) do
         if race.id == raceId then
-            for i, playerId in ipairs(race.races.players) do
-                if playerId == source then
-                    table.remove(race.races.players, i)
+            local raceData = race.races and race.races[1]
+            if not raceData or not raceData.players then
+                break
+            end
+            local playerCid = GetPlayerCid(source)
+            for i, player in ipairs(raceData.players) do
+                if player.identifier == playerCid then
+                    table.remove(raceData.players, i)
                     break
                 end
             end
@@ -416,7 +417,7 @@ function addPlayerToRace(source, race, r)
         table.insert(r.players, playerData)
         playerPositions[source] = { lap = 1, checkpoint = 1 }
         
-        for _, cacheRace in ipairs(cacheData) do
+        for _, cacheRace in ipairs(cacheData.tracks or {}) do
             if cacheRace.id == race.id then
                 cacheRace.races = race.races
                 break
@@ -457,7 +458,7 @@ function hasPlayerJoinedRace(players, playerCid)
 end
 
 function updatePlayerPositions(raceId, source)
-    for _, race in ipairs(cacheData) do
+    for _, race in ipairs(cacheData.tracks or {}) do
         if race.id == raceId then
             if type(race.races) == "string" then
                 race.races = json.decode(race.races)
@@ -495,7 +496,9 @@ function updatePlayerPositions(raceId, source)
                                 local previousPlayer = r.players[i - 1]
                                 local posPrevious = getPlayerPosition(previousPlayer.identifier)
                                 
-                                local checkpointDifference = math.abs((posCurrent.lap * totalCheckpoints + posCurrent.checkpoint) - (posPrevious.lap * totalCheckpoints + posPrevious.checkpoint))
+                                local currentTotalCheckpoints = math.max(tonumber(posCurrent.totalCheckpoints) or 1, 1)
+                                local previousTotalCheckpoints = math.max(tonumber(posPrevious.totalCheckpoints) or currentTotalCheckpoints, 1)
+                                local checkpointDifference = math.abs((posCurrent.lap * currentTotalCheckpoints + posCurrent.checkpoint) - (posPrevious.lap * previousTotalCheckpoints + posPrevious.checkpoint))
                                 local randomTime = math.random(100, 500) / 1000
                                 timeDifference = string.format("-%0.3f", checkpointDifference * randomTime)
                             end
@@ -518,16 +521,16 @@ function updatePlayerPositions(raceId, source)
                                 player.cash = 0
                             end
 
-                            local playerData = playerPositions[source]
+                            local playerData = getPlayerPosition(player.identifier)
                             if playerData and playerData.bestLapTime then
                                 player.bestLapTime = playerData.bestLapTime
                             else
                                 player.bestLapTime = nil
                             end
-                            player.carName = playerPositions[source].carName
-                            player.carTransmission = playerPositions[source].carTransmission
-                            player.carTurbo = playerPositions[source].carTurbo
-                            player.alias = cacheData['alias'][player.identifier]
+                            player.carName = playerData.carName
+                            player.carTransmission = playerData.carTransmission
+                            player.carTurbo = playerData.carTurbo
+                            player.alias = (cacheData['alias'][player.identifier] and cacheData['alias'][player.identifier].alias) or player.alias
                         end
 
 
@@ -557,7 +560,7 @@ end
 
 function CheckRaceCompletion(raceId, raceposition, bestTime, source)
     local playerCid = GetPlayerCid(source)
-    for _, race in ipairs(cacheData) do
+    for _, race in ipairs(cacheData.tracks or {}) do
         if race.id == raceId then
             if type(race.races) == "string" then
                 race.races = json.decode(race.races)
