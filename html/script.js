@@ -4,6 +4,8 @@ let alias = '';
 let raceCreated = false;
 let currentTrackId = 0;
 let currentIdentifier = '';
+let tracks = [];
+let allAlias = [];
 
 window.addEventListener("message", function (e) {
     e = e.data;
@@ -17,6 +19,11 @@ window.addEventListener("message", function (e) {
         case "updateRaceData":
             return updateRaceData(e)
         case "close":
+            if (interval !== null) {
+                clearInterval(interval);
+                interval = null;
+                raceData = null;
+            }
             return $("body , .hud").fadeOut(500);
         default:
             return;
@@ -28,6 +35,15 @@ let interval = null;
 let milliseconds = 999;
 let previousCheckpointTime = null;
 let previousLapTime = null;
+
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
 
 function updateRaceData(data) {
     let currentGroupIndex = Math.floor((data.currentCheckpoint - 1) / 4);
@@ -75,7 +91,7 @@ function updateRaceData(data) {
         $('.players-box').append(
             `<div class="${itemClass}">
                 <div ${aliasStyle} class="number">${i + 1}</div>
-                <div class="alias" ${aliasStyle}>${v.alias.alias}</div>
+                <div class="alias" ${aliasStyle}>${escapeHtml(v.alias.alias)}</div>
                 <div ${aliasStyle} class="race-time">${v.timeDifference}</div>
                 <div ${aliasStyle} class="left-box"></div>
             </div>`
@@ -160,7 +176,7 @@ function openMenu(data) {
         if (trackData && trackData.eventName && trackData.type && trackData.distance && trackData.createTime) {
             $('.tracks-list').append(`
                 <div data-id=${v.id} id="tracks-item" class="item">
-                    <div class="name">${trackData.eventName}</div>
+                    <div class="name">${escapeHtml(trackData.eventName)}</div>
                     <div style="left: 25%;width: 1%;" class="name">${trackData.type}</div>
                     <div style="left: 42%;width: 1%;" class="name">${trackData.distance}mi</div>
                     <div style="left: 55.5%;width: 1%;" class="name">${formatDate(trackData.createTime)}</div>
@@ -192,7 +208,7 @@ function openMenu(data) {
 
             $.each(data, function (x, y) {
                 var rating = y.rating !== undefined ? y.rating : 'N/A';
-                var alias = y.alias !== undefined ? y.alias : 'Unknown';
+                var rowAlias = y.alias !== undefined ? y.alias : 'Unknown';
                 var vehicle = y.vehicle !== undefined ? y.vehicle : 'Unknown';
                 var engine = y.engine !== undefined ? y.engine : 'Unknown';
                 var transmission = y.transmission !== undefined ? y.transmission : 'Unknown';
@@ -201,7 +217,7 @@ function openMenu(data) {
                 $('.rating-list').append(`
                     <div class="item">
                         <div class="name">${rating}</div>
-                        <div class="name" style="left: 15%;">${alias}</div>
+                        <div class="name" style="left: 15%;">${escapeHtml(rowAlias)}</div>
                         <div class="name" style="left: 30.5%;">${vehicle}</div>
                         <div class="name" style="left: 45.5%;">${engine}</div>
                         <div class="name" style="left: 60.5%;">${transmission}</div>
@@ -219,21 +235,21 @@ function openMenu(data) {
 
     renderPage(currentPage, filteredAliasArray);
 
-    $('.prev-page').click(function () {
+    $('.prev-page').off('click.racing').on('click.racing', function () {
         if (currentPage > 0) {
             currentPage--;
             renderPage(currentPage, filteredAliasArray);
         }
     });
 
-    $('.next-page').click(function () {
+    $('.next-page').off('click.racing').on('click.racing', function () {
         if (currentPage < Math.ceil(filteredAliasArray.length / itemsPerPage) - 1) {
             currentPage++;
             renderPage(currentPage, filteredAliasArray);
         }
     });
 
-    $('.alias-search').on('keyup', function () {
+    $('.alias-search').off('keyup.racing').on('keyup.racing', function () {
         var searchTerm = $(this).val().toLowerCase();
         filteredAliasArray = allAliasArray.filter(function (item) {
             return item.data.some(function (data) {
@@ -249,7 +265,7 @@ function openMenu(data) {
         if (v.startControl) {
             $('.active-list').append(`
                 <div class="item">
-                  <div class="name">${v.eventName}</div>
+                  <div class="name">${escapeHtml(v.eventName)}</div>
                   <div style="left: 42%;width: 1%;" class="name">Ground Zero</div>
                   <div style="left: 55.5%;width: 1%;" class="name">Open</div>
                   <div style="left: 62.5%;width: 1%;" class="name">Lap</div>
@@ -263,8 +279,8 @@ function openMenu(data) {
 
             if (v.completed) {
                 $('.completed-list').append(`
-                    <div class="item" data-password="${v.password}" data-id="${v.id}" data-players="${encodeURIComponent(JSON.stringify(v.players))}"  data-event-name="${v.eventName}"  data-vehicle-class="${v.vehicleClass}"  data-type="${v.type}"  data-buy-in="${v.buyIn}"  data-laps="${v.laps}"  data-distance="${v.distance}">
-                        <div class="name">${v.eventName}</div>
+                    <div class="item" data-password="${v.password}" data-id="${v.id}" data-players="${encodeURIComponent(JSON.stringify(v.players))}"  data-event-name="${escapeHtml(v.eventName)}"  data-vehicle-class="${v.vehicleClass}"  data-type="${v.type}"  data-buy-in="${v.buyIn}"  data-laps="${v.laps}"  data-distance="${v.distance}">
+                        <div class="name">${escapeHtml(v.eventName)}</div>
                         <div style="left: 42%; width: 1%;" class="name">Ground Zero</div>
                         <div style="left: 55.5%; width: 1%;" class="name">${v.vehicleClass}</div>
                         <div style="left: 62.5%; width: 1%;" class="name">${v.type}</div>
@@ -276,8 +292,8 @@ function openMenu(data) {
                 `);
             } else if (v.completed == false) {
                 $('.pending-list').append(`
-                    <div class="item" data-identifier="${v.identifier}" data-password="${v.password}" data-id="${v.id}" data-players="${encodeURIComponent(JSON.stringify(v.players))}"  data-event-name="${v.eventName}"  data-vehicle-class="${v.vehicleClass}"  data-type="${v.type}"  data-buy-in="${v.buyIn}"  data-laps="${v.laps}"  data-distance="${v.distance}">
-                        <div class="name">${v.eventName}</div>
+                    <div class="item" data-identifier="${v.identifier}" data-password="${v.password}" data-id="${v.id}" data-players="${encodeURIComponent(JSON.stringify(v.players))}"  data-event-name="${escapeHtml(v.eventName)}"  data-vehicle-class="${v.vehicleClass}"  data-type="${v.type}"  data-buy-in="${v.buyIn}"  data-laps="${v.laps}"  data-distance="${v.distance}">
+                        <div class="name">${escapeHtml(v.eventName)}</div>
                         <div style="left: 42%; width: 1%;" class="name">Ground Zero</div>
                         <div style="left: 55.5%; width: 1%;" class="name">${v.vehicleClass}</div>
                         <div style="left: 62.5%; width: 1%;" class="name">${v.type}</div>
@@ -316,11 +332,12 @@ function formatDate(timestamp) {
 
 function update(data) {
     $('.active-list, .pending-list').empty();
+    $('.view-user-list').empty();
     $.each(data['races'], function (i, v) {
         $.each(v.players, function (x, y) {
             $('.view-user-list').append(`
                 <div class="item">
-                    <div class="name">${y.alias} </div>
+                    <div class="name">${escapeHtml(y.alias)} </div>
                 </div>
             `);
         });
@@ -328,7 +345,7 @@ function update(data) {
         if (v.startControl) {
             $('.active-list').append(`
                 <div class="item">
-                  <div class="name">${v.eventName}</div>
+                  <div class="name">${escapeHtml(v.eventName)}</div>
                   <div style="left: 42%;width: 1%;" class="name">Ground Zero</div>
                   <div style="left: 55.5%;width: 1%;" class="name">${v.vehicleClass}</div>
                   <div style="left: 62.5%;width: 1%;" class="name">${v.type}</div>
@@ -340,8 +357,8 @@ function update(data) {
             `);
         } else {
             $('.pending-list').append(`
-            <div class="item" data-identifier="${v.identifier}" data-password="${v.password}" data-id="${v.id}" data-players="${encodeURIComponent(JSON.stringify(v.players))}"  data-event-name="${v.eventName}"  data-vehicle-class="${v.vehicleClass}"  data-type="${v.type}"  data-buy-in="${v.buyIn}"  data-laps="${v.laps}"  data-distance="${v.distance}">
-                <div class="name">${v.eventName}</div>
+            <div class="item" data-identifier="${v.identifier}" data-password="${v.password}" data-id="${v.id}" data-players="${encodeURIComponent(JSON.stringify(v.players))}"  data-event-name="${escapeHtml(v.eventName)}"  data-vehicle-class="${v.vehicleClass}"  data-type="${v.type}"  data-buy-in="${v.buyIn}"  data-laps="${v.laps}"  data-distance="${v.distance}">
+                <div class="name">${escapeHtml(v.eventName)}</div>
                 <div style="left: 42%; width: 1%;" class="name">Ground Zero</div>
                 <div style="left: 55.5%; width: 1%;" class="name">${v.vehicleClass}</div>
                 <div style="left: 62.5%; width: 1%;" class="name">${v.type}</div>
@@ -395,7 +412,7 @@ $(document).on('click', '.view-completed', function () {
             <div class="item">
                 <div style="background-color: ${boxColor};" class="box"></div>
                 <div class="name">#${i + 1}</div>
-                <div class="name" style="left: 15%;">${v.alias}</div>
+                <div class="name" style="left: 15%;">${escapeHtml(v.alias)}</div>
                 <div class="name" style="left: 30.5%;color: #28d2a8;">$${v.cash}</div>
                 <div class="name" style="left: 40.5%;">1500/ <span style="color: #28d2a8;">${rating}</span> </div>
                 <div class="name" style="left: 55.5%;">${formatTimeWithoutMilliseconds(v.finishTime)}</div>
@@ -426,7 +443,7 @@ $(document).on('click', '.finish-race-track', function () {
 })
 
 $(document).on('click', '.create-race-button', function () {
-    trackName = $('.trackname').val();
+    let trackName = $('.trackname').val();
 
     if (trackName == '' || trackName == null) {
         notification('Please enter a name', 'error');
@@ -436,8 +453,8 @@ $(document).on('click', '.create-race-button', function () {
     popup("Track values are FINAL, are you sure you want to start Track creation?", "confirm").then((result) => {
         if (result) {
 
-            raceType = $('.racetype-zort').val();
-            lap = $('.lap-value').val();
+            let raceType = $('.racetype-zort').val();
+            let lap = $('.lap-value').val();
 
             $.post("http://exter-racingapp/createTrack", JSON.stringify({
                 name: trackName,
@@ -494,7 +511,7 @@ $(document).on('click', '.join-race', function () {
     if (racePasword != '') {
         popup("Enter the password to join the race ", "input").then((result) => {
             if (result) {
-                passwordInput = $('.login-input').val();
+                let passwordInput = $('.login-input').val();
                 $.post("http://exter-racingapp/joinrace", JSON.stringify({ id: raceId, password: passwordInput }), function (data) {
                     notification(data.message, data.type);
                     $('.view-user-list').empty();
@@ -502,7 +519,7 @@ $(document).on('click', '.join-race', function () {
                         $.each(data.players, function (i, v) {
                             $('.view-user-list').append(`
                                 <div class="item">
-                                    <div class="name">${v.alias} </div>
+                                    <div class="name">${escapeHtml(v.alias)} </div>
                                 </div>
                             `);
                         });
@@ -559,7 +576,7 @@ $(document).on('click', '.view-race', function () {
     $.each(players, function (i, v) {
         $('.view-user-list').append(`
             <div class="item">
-                <div class="name">${v.alias} </div>
+                <div class="name">${escapeHtml(v.alias)} </div>
             </div>
         `);
     });
@@ -576,7 +593,7 @@ $(document).on('click', '.view-race', function () {
 // })
 
 $(document).on('click', '.view-button', function () {
-    page = $(this).data('page');
+    let page = $(this).data('page');
 
     if (page == 'create-track-page') {
         if (raceCreated) {
@@ -658,7 +675,7 @@ $(document).on('click', '.setup', function () {
         $('.ladder-page , .cls-btn').show();
     }, 1000);
 
-    val = $('.alias-name').val();
+    let val = $('.alias-name').val();
 
     if (val == '' || val == null) {
         notification('Please enter a name', 'error');
@@ -841,4 +858,3 @@ function updateTime() {
 
 setInterval(updateTime, 1000);
 updateTime();
-
